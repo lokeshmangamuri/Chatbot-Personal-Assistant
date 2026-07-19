@@ -17,5 +17,6 @@ class VectorStore:
 
     def get_dense_retriever(self):
 
-        return self.vector_db.as_retriever(search_type="similarity",
+        dense_ret=self.vector_db.as_retriever(search_type="similarity",
             search_kwargs={"k": 5},)
+        return dense_ret

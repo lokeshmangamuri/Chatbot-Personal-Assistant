@@ -1,2 +1,4 @@
 __pycache__/
 .venv/
+.env
+chroma_db/12668004-3fce-44a0-8489-72d93e55d192/

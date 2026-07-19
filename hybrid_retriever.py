@@ -1,6 +1,5 @@
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
-
 class HybridRetriever:
 
     def __init__(self, documents, dense_retriever):
@@ -14,9 +13,6 @@ class HybridRetriever:
         bm25.k = 5
 
         hybrid = EnsembleRetriever(
-            retrievers=[
-                bm25,
-                self.dense,],
-            weights=[0.5,0.5,],)
+            retrievers=[bm25,self.dense,],weights=[0.5,0.5,],)
 
         return hybrid

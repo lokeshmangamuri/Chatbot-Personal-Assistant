@@ -19,7 +19,6 @@ class DataLoader:
         document = Document(
             page_content=markdown,
             metadata={"source": self.pdf_path})
-
         return [document]
 
     def split_documents(self, documents):
@@ -31,6 +30,14 @@ class DataLoader:
         )
 
         chunks = splitter.split_documents(documents)
+        # with open("documents.txt", "w", encoding="utf-8") as f:
+        #     for i, chunk in enumerate(chunks, start=1):
+        #         f.write("=" * 80 + "\n")
+        #         f.write("Document 1\n")
+        #         f.write("=" * 80 + "\n")
+        #         f.write(chunk.page_content)
+        #         f.write("\n\nMetadata:\n")
+        #         f.write(str(chunk.metadata))
 
         print(f"Number of chunks: {len(chunks)}")
 
