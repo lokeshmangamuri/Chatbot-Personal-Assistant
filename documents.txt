@@ -1,0 +1,351 @@
+================================================================================
+Document 1
+================================================================================
+## On LLM-Enhanced Mixed-Type Data Imputation with High-Order Message Passing
+
+Jianwei Wang 1 , Kai Wang 2 , Ying Zhang 3 , Wenjie Zhang 1 , Xiwei Xu 4 , Xuemin Lin 2
+
+2 Antai College of Economics &amp; Management, Shanghai Jiao Tong University, Shanghai, China
+
+1 The University of New South Wales, Sydney, Australia
+
+3 Zhejiang Gongshang University, Hangzhou, China
+
+{jianwei.wang1,wenjie.zhang}@unsw.edu.au,{w.kai,xuemin.lin}@sjtu.edu.cn,ying.zhang@zjgsu.edu.cn,xiwei.xu@data61.csiro.au
+
+## ABSTRACT
+
+Missing data imputation, which aims to impute the missing values in the raw datasets to achieve the completeness of datasets, is crucial for modern data-driven models like large language models (LLMs) and has attracted increasing interest over the past decades. Despite its importance, existing solutions for missing data imputation either 1) only support numerical and categorical data or 2) show an unsatisfactory performance due to their design prioritizing text data and overlooking intrinsic characteristics of tabular data.
+
+4 Data61, CSIRO, Australia
+
+Table 1: Comparison of representative imputation methods. "-" denotes not applicable. Abbr: GAN (generative adversarial network), GNN (graph neural network), OT (optimal transport), AE (autoencoder), LLMs (large language models).
+
+In this paper, we propose UnIMP, a Un ified IMP utation framework that leverages LLM and high-order message passing to enhance the imputation of mixed-type data including numerical, categorical, and text data. Specifically, we first introduce a cell-oriented hypergraph to model the table. We then propose BiHMP, an efficient Bidirectional High-order Message-Passing network to aggregate global-local and high-order information on the constructed hypergraph while capturing the inter-column heterogeneity and intra-column homogeneity. To effectively and efficiently align the capacity of the LLM with the information aggregated by BiHMP, we introduce Xfusion, which, together with BiHMP, acts as adapters for the LLM. We follow a pre-training and fine-tuning pipeline to train UnIMP, integrating two optimizations: chunking technique, which divides tables into smaller chunks to enhance efficiency; and progressive masking technique, which gradually adapts the model to learn more complex data patterns. Both theoretical proofs and empirical experiments on 10 real-world datasets highlight the superiority of UnIMP over existing techniques.
+
+## PVLDB Artifact Availability:
+
+The source code, data, and/or other artifacts have been made available at https://github.com/guaiyoui/UnIMP.
+
+## 1 INTRODUCTION
+
+Data quality has gained increasing attention due to its pivotal role in developing and training data-driven models, particularly those built on artificial intelligence (AI) technology. For instance, the performance of large language models (LLMs) can be significantly enhanced by high-quality training datasets, without requiring substantial changes to the model architecture [14]. The missing data problem, as one of the most critical issues in the area of data quality, is ubiquitous in real-world raw datasets due to various factors such as poor data collection practices and device malfunctions [35]. To handle these issues, missing data imputation (a.k.a. missing value imputation) [52, 64] has been introduced, which aims to fill in missing values using information from observed data samples and features, thereby enhancing the quality of the raw dataset and improving the performance of downstream tasks.
+
+| Methods                       | Handle Data Types   | Handle Data Types   | Handle Data Types   | Generalization   | Backbone   |
+|-------------------------------|---------------------|---------------------|---------------------|------------------|------------|
+|                               | Num.                | Cate.               | Text                |                  |            |
+| Mean/Mode [22]                | ★★                  | ★★                  | -                   | ★★★              | Statistics |
+| KNNI [68]                     | ★★★                 | ★★★                 | -                   | ★★★              | Similarity |
+| MICE [55]                     | ★★★                 | ★★★                 | -                   | ★                | Regression |
+| GAIN [63]/VGAIN [35]          | ★★★                 | ★★★                 | -                   | ★                | GAN        |
+| GRAPE [64]/IGRM [70]          | ★★★                 | ★★★                 | -                   | ★                | GNNs       |
+| TDM [69]                      | ★★★                 | ★★★                 | -                   | ★                | OT         |
+| ReMasker [12]                 | ★★★                 | ★★★                 | -                   | ★                | AE         |
+| NOMI [52]                     | ★★★                 | ★★★                 | -                   | ★                | Similarity |
+| DFMs [40]                     | ★                   | ★★                  | ★★★                 | ★★★              | LLMs       |
+| Table-GPT [28]/Jellyfish [66] | ★                   | ★★                  | ★★★                 | ★★★              | LLMs       |
+| UnIMP (ours)                  | ★★★                 | ★★★                 | ★★★                 | ★★★              | GNNs+LLMs  |
+
+To better model relationships among samples and features within datasets for imputation, various machine learning and deep learning methods are introduced, such as regression algorithm in MICE [55], generative adversarial net (GAN) [58] in GAIN [63] and VGAIN [35], optimal transport (OT) [57] in TDM [69], auto-encode (AE) in ReMasker [12], and graph neural networks (GNNs) in GRAPE [64] and IGRM [70]. While these methods achieve outstanding performance
+
+When applying imputation techniques to real-world datasets, it is desirable that these techniques can achieve high accuracy and support a variety of data types. High imputation accuracy is crucial, as existing studies have demonstrated that a higher accuracy would generally lead to a higher downstream task performance [35, 52, 63, 69]. Supporting multiple data types is also important, as realworld datasets in fields like e-commerce [60] and healthcare [23] often contain a mix of numerical, categorical and text data [44, 61]. Moreover, with advances in the Internet of Things (IoT [31]) and big data, the proportion of mixed-type data continues to grow [1, 54]. Existing works. Given the importance and practical value of missing data imputation, a set of techniques has been developed [12, 52, 64]. Some representative and recent methods are summarized in Table 1, and more details can be found in the surveys [30, 35]. The early-stage imputation methods were primarily rule-based, including statistics-based approaches such as Mean and Mode [22], and similarity-based methods such as 𝐾 Nearest Neighbors Imputation (KNNI) [68]. These methods have good generalization capacity, as the rules can be applied to various datasets. However, their imputation accuracy is often limited since these fixed rules often struggle to capture the underlying patterns in diverse datasets effectively.
+
+......
+
+Tabular Data
+
+Figure 1: Comparisons of Frameworks.
+
+<!-- image -->
+
+Serialization (Augmented) Bipartite Graph Bipartite Learning in handling numerical and categorical data, they struggle to process text data effectively. Furthermore, these approaches typically train a separate model for each dataset or even for each individual feature, hindering their generalizability to other datasets.
+
+XFusion Challenges . To design an accurate imputation method for mixedtype data, two challenges exist below:
+
+As summarized in Table 1, existing imputation methods generally fall into two categories: 1) LLM-based methods exhibit an unsatisfactory performance, particularly for numerical data, and 2) other learning-based methods and rule-based methods only support numerical and categorical data. To better support real-world applications, an imputation method capable of handling mixed-type data while maintaining high accuracy is in demand. A straightforward approach would be to impute each data type using the outperforming method for that type, such as applying MICE [43] or NOMI [52] for numerical and categorical data, and Jellyfish [66] for text data.
+
+GPT/ Table-GPT Inference Cell-oriented Hypergraph BiHMP However, imputing each data type separately may ignore the intricate dependencies between them, leading to inconsistencies and reduced overall accuracy.
+
+GPT/ Table-GPT (b) DFMs/Table-GPT Serialization Inference The missing data of is (b) GRAPE/IGRM (c) UnIMP Project head &amp;&amp; Detokonizer (Augmented) Bipartite Graph Bipartite Learning Cell-oriented The missing data of is Project head &amp;&amp; Detokonizer XFusion Hypergraph BiHMP (b) DFMs/Table-GPT The missing data of is (a) GRAPE/IGRM (c) UnIMP Projection head Projection head The missing data of is Recently, LLM-based methods are emerging in the field, leveraging knowledge encoded in LLM to predict missing data. LLM-based imputation can be broadly categorized into two primary categories: in-context-learning-based methods (e.g., [5, 40, 41, 65]) and finetuning-based methods (e.g., [28, 66]). The in-context-learning-based methods, with Direct Foundation Models (DFMs) [40] as a prominent representative depicted in Figure 1(a), directly infer missing data by pre-trained LLM with carefully designed prompts. The finetuning-based methods, with Table-GPT and Jellyfish as prominent representatives depicted in Figure 1(b), fine-tune LLM to adapt the model for tabular tasks including imputation. Motivations. By serializing tabular data into text and generating the next token auto-regressively from prompts, existing LLM-based methods can handle mixed-type data with good generalization capacity. However, they typically exhibit limited performance, especially with numerical data. They directly recast the problem of imputation as text generation while the intrinsic characteristics of tabular data remain insufficiently explored: 1) Global-local information . The value of a cell is influenced by both global patterns across the entire table and localized details of the cell. These LLMbased methods focus on individual samples and several examples as prompt, overlooking global information; 2) High-order dependencies . The relationships in the table are not necessarily pairwise but may involve three or more entities simultaneously. However, LLM-based methods, built on the attention mechanism [49], mainly focus on pairwise relationships. While stacking attention layers allows tokens later in the prompt to capture some high-order relationships, it lacks an explicit mechanism to capture them comprehensively; 3) Inter-column heterogeneity and intra-column homogeneity . Features across columns can be highly diverse, and cells within the same column generally exhibit consistent semantics. LLM-based methods, designed for sequential inputs, struggle to align the specific contextual relationships between columns and within columns. Challenge I: How to aggregate global-local and high-order information for imputation while capturing inter-column and intra-column patterns? The existence of missing data and large-scale tables complicate the aggregation process. A direct solution is to input the entire table into the LLM. However, computing complexity grows quadratically as the size of input increases. Another promising alternative is to apply the global to local framework [53] to learn the multi-level features for imputation. However, it relies on similarity search on samples with missing features, leading to inaccurate results. Methods such as retrieval-augmented generation [27] show promise for aggregating information. However, they primarily focus on local information while overlooking global information. Therefore, it is challenging to aggregate these key information. Challenge II: How to effectively integrate the aggregation module and train the model to support mixed-type imputation? The presence of mixed-type data complicates the integration process. To handle mixed-type data, a direct approach would be to sequentially apply LLM, aggregation module and then another LLM. This pipeline first uses the LLM to embed the input into a shared latent space, followed by information aggregation and finally generates the output by another LLM. However, treating LLM and the aggregation module as separate components may limit the alignment of the capabilities encoded in LLM with the aggregated information. Moreover, training this sequential pipeline on tables of varying sizes may fail to adequately utilize computational resources, resulting in inefficiencies. Hence, it is challenging to integrate the aggregation module and train the model for mixed-type imputation. Oursolutions . Guided by the above challenges, we propose UnIMP, a Un ified IMP utation framework as depicted in Figure 1(c) that employs LLM and the high-order message passing for accurate mixed-type data imputation.
+
+To address Challenge I , we design a cell-oriented hypergraph in UnIMP to model tabular datasets and introduce BiHMP, an efficient and effective Bidirectional High-order Message-Passing network, to aggregate information on the constructed hypergraph. By leveraging high-order message passing on the hypergraph, BiHMP learns to aggregate global-local and high-order information while capturing intra- and inter-column relationships. Most existing hypergraphs for tables are value-oriented, modeling distinct values as nodes [11]. However, this approach struggles with modeling unseen values in the context of missing data and handling numerical and textual data where co-occurrence patterns are not easily defined, limiting
+
+Implicit Modeling Chapter 4: Neural Attributed Community Search at Billion Scale
+
+\
+
+Chapter 5: Ensemble-based Deep Multilayer Community Search
+
+Chapter 6: On LLM-Enhanced Mixed-Type Data Imputation with High-Order Message Passing
+
+Chapter 7: Missing Data Imputation with Uncertainty-Driven Network its applicability in mixed-type imputation. Therefore, we adopt the cell-oriented hypergraph for imputation following [8], where each cell in the dataset is modeled as a node and nodes within the same row or column are connected by hyperedges. This structure enables the flexible integration of missing and mixed-type data. Furthermore, BiHMP is designed to efficient yet effective aggregate information. It comprises iteratively applied linear hyperedge-tonode and node-to-hyperedge layers. The hyperedge-to-node layer enriches node representations by aggregating information from their associated hyperedges. Conversely, the node-to-hyperedge layer refines hyperedge features by propagating information from connected nodes back to their hyperedges.
+
+To more effectively and efficiently train UnIMP for mixed-type imputation, we follow the pre-train and fine-tune strategy [2, 29, 50] and integrate two optimizations, i.e., the chunking and the progressive masking motivated by [12, 62, 64]. Specifically, the chunking technique splits all tables into smaller, uniform chunks to handle large tables and facilitate efficient batch processing. This approach allows for more effective use of computational resources, such as GPU memory and parallel computation capabilities. The progressive masking technique, on the other hand, gradually increases the complexity of the imputation task by progressively masking more data during training. This technique enables the model to learn complex patterns progressively, improving its understanding of data relationships and generalization capacity.
+
+To address Challenge II , UnIMP is designed with the LLM as the backbone, while BiHMP and Xfusion (a fusion module based on attention mechanism [49]) serve as adapters [20, 67] for the LLM. Specifically, prompts are together propagated by both the LLM and the BiHMP on the embedded hypergraph. The information aggregated by BiHMP, along with the LLM-generated data, is sent to the Xfusion module to enhance the alignment and integration of both sets of information. The fused data is subsequently sent to the projection head of LLM to generate output. Moreover, The adapter strategy trains only the BiHMP, Xfusion and projection head, freezing most LLM parameters to enhance efficiency and better preserve pre-trained knowledge in LLM while incorporating BiHMP-aggregated information.
+
+Theoretical and empirical studies . We theoretically and empirically demonstrate the superiority of UnIMP. Theoretically, we prove that a model capable of capturing global-local information, high-order dependencies, and inter- and intra-column patterns leads to improved imputation accuracy. Furthermore, we show that our UnIMP effectively incorporates these critical properties. Empirical evaluations on 10 real-world datasets with varying table sizes and data types also validate the excellent performance of UnIMP in terms of both accuracy and efficiency. For numerical and categorical data, UnIMP reduces imputation RMSE by an average of 12.11% to 45.22% compared to previous state-of-the-art methods and other baselines. In the case of imputing text data, UnIMP improves imputation accuracy by 30.53%, 28.04% and 23.47% over DFMs [40], Table-GPT [28] and Jellyfish [66] respectively, as measured by ROUGE-1 𝐹 1. Furthermore, UnIMP can handle large datasets and exhibits robust generalization ability.
+
+- We propose a unified framework UnIMP to accurately impute mixed-type data, including numerical, categorial and text data.
+
+Contributions. The main contributions are as follows.
+
+Table 2: Symbols and Descriptions
+
+| Notation            | Description                                      |
+|---------------------|--------------------------------------------------|
+| 𝑋, ˜ 𝑋,𝑋            | raw dataset, imputed dataset and ground-truth    |
+| 𝑛,𝑑                 | the row number and column number                 |
+| 𝑥 𝑖 ,𝑥 𝑖 𝑗          | 𝑖 -th sample in 𝑋 and its 𝑗 -th column data      |
+| 𝑀 ∈ { 0 , 1 } 𝑛 × 𝑑 | the mask matrix indicating incompleteness        |
+| 𝑚 𝑖 ,𝑚 𝑖 𝑗          | 𝑖 -th sample in 𝑀 and its 𝑗 -th column data      |
+| 𝐻𝐺 (V , E)          | hypergraph with nodes V and hyperedges E         |
+| 𝜃                   | model parameters.                                |
+| 𝑧 𝑣 𝑖 ,𝑧 𝑒 𝑖        | the hidden embedding of node 𝑣 𝑖 & hyperedge 𝑒 𝑖 |
+| 𝜎                   | non-linear function (ReLU)                       |
+| 𝑓 ,𝑔                | functions or layers in the neural networks       |
+
+- We propose a cell-oriented hypergraph to model tabular data and design BiHMP, an efficient and effective bidirectional highorder message-passing network, to aggregate information while capturing the key intrinsic characteristics of tabular data.
+- We theoretically prove the critical role of global-local information, high-order relationships, and inter- and intra-column patterns to the accuracy of imputation
+- We introduce Xfusion, along with BiHMP, as adapters for LLM to process diverse data and enable accurate mix-type imputation. Additionally, we integrate chunking and progressive masking techniques to train UnIMP, enhancing performance.
+- Extensive empirical experiments on 10 real-world datasets validate the outstanding performance of UnIMP.
+
+## 2 PRELIMINARIES
+
+## 2.1 Problem Statement
+
+The hypergraph is a generalization of the graph where each hyperedge may contain an arbitrary number of nodes. We denote a hypergraph by 𝐻𝐺 (V , E) , where V is a set of nodes, and E is the set of hyperedges. E ⊆ 𝑃 ∗ (V) \ {∅} where 𝑃 ∗ (V) is the power set on the nodes [8]. We use 𝑥 𝑣 to denote the cell w.r.t. the node 𝑣 . With the above notations, we define the task of mixed-type missing data imputation as follows.
+
+Following previous works [35, 52], the task of missing data imputation is defined over tabular datasets X [28, 35, 52, 69], where each 𝑋 ∈ X consists of 𝑛 data samples (rows) and 𝑑 features (columns). We denote the 𝑗 -th feature of the 𝑖 -th sample as 𝑥 𝑖 𝑗 , which can be of numerical, categorical or text type. A mask matrix 𝑀 ∈ 𝑅 𝑛 × 𝑑 is used to indicate missing components in 𝑋 . 𝑚 𝑖 𝑗 equals 1 if 𝑥 𝑖 𝑗 is observed and 0 if 𝑥 𝑖 𝑗 is missing, i.e., 𝑋 = 𝑋 𝑜𝑏𝑠 ∪ 𝑋 𝑚𝑖𝑠𝑠 where 𝑋 𝑜𝑏𝑠 = { 𝑥 𝑖 𝑗 | 𝑥 𝑖 𝑗 ∈ 𝑋,𝑚 𝑖 𝑗 = 1 } and 𝑋 𝑚𝑖𝑠𝑠 = { 𝑥 𝑖 𝑗 | 𝑥 𝑖 𝑗 ∈ 𝑋,𝑚 𝑖 𝑗 = 0 } . The imputed data and the ground-truth data are denoted as ˜ 𝑋 and 𝑋 = 𝑋 𝑜𝑏𝑠 ∪ 𝑋 𝑚𝑖𝑠𝑠 , respectively. Note that the indexing in this paper starts from zero, which is a common convention in many programming languages.
+
+Definition 2.1: (Mixed-type Missing Data Imputation [52, 64]). Mixed-type missing data imputation aims to impute the unobserved elements in the raw data, i.e., 𝑋 𝑚𝑖𝑠𝑠 , and make the imputed matrix ˜ 𝑋 as close to the real complete dataset 𝑋 as possible. The raw data matrix 𝑋 may contain numerical, categorical and text data.
+
+## 2.2 Large Language Models
+
+LLMs, such as GPT [6] and Llama [14] which contain billions of parameters, have demonstrated remarkable emergent behaviors and impressive zero-shot generalization capabilities across diverse tasks. The execution process of LLMs typically comprises four key components: 1) a tokenizer that segments input text into discrete tokens, 2) an LLM backbone that is used for feature propagation, 3) a projection head that predicts the next token, and 4) a decoding process that translates token IDs back into human-readable text.
+
+These LLMs are often auto-regressive, trained on large text corpora with the objective of maximizing the log-likelihood of the next word given the previous words.
+
+<!-- formula-not-decoded -->
+
+where 𝑡 𝑖 stands the token and 𝑘 is the context window size. There are two typical ways to adapt the model to new tasks and boost performance: supervised-fine-tuning (SFT) and in-context-learning. For SFT, given a training query 𝑇 = { 𝑡 0 , 𝑡 1 , · · · , 𝑡 𝑠 } and training target 𝑦 , the objective is to maximize the following log-likelihood: ˝ ( 𝑇,𝑦 ) log 𝑃 ( 𝑦 | 𝑡 0 , 𝑡 1 , · · · , 𝑡 𝑠 ) . The in-context-learning-based methods handle new tasks during inference by constructing a prompt that includes examples (i.e., context). Given a set of example queries { 𝑇 0 , 𝑇 1 , · · · , 𝑇 𝑤 } , targets { 𝑦 0 , 𝑦 1 , · · · , 𝑦 𝑤 } , and a new query text 𝑇 𝑤 + 1 , a prompt ( 𝑇 0 , 𝑦 0 , · · · , 𝑇 𝑤 , 𝑦 𝑤 , 𝑇 𝑤 + 1 ) is constructed and sent to the LLM to infer the results.
+
+However, these LLM-based methods are inherently designed to prioritize text data and cannot effectively utilize key intrinsic characteristics of tabular data, leading to unsatisfactory performance, especially when handling numerical data.
+
+Methods employing both techniques have been adapted for missing data imputation. Specifically, Table-GPT [28] and Jellyfish [66] use SFT to fine-tune the language model on diverse tabular tasks, showing impressive performance gains compared to the original LLM. DFMs [40] leverage the in-context-learning by constructing prompts with 𝑘 -shots context (i.e., 𝑘 query-target pairs) for imputation, demonstrating the impressive performance of LLM.
+
+## 3 THE OVERALL FRAMEWORK
+
+In this section, we first introduce three key intrinsic characteristics of tabular data and prove its critical role for imputation. Then, we introduce the details of UnIMP.
+
+## 3.1 Intrinsic Characteristics of Tabular Data
+
+Global-local information . The global-local information indicates that the value of the cell is influenced by both its neighboring cells (local context) and cells across the table (global context). For example, as shown in Figure 2, the name of the president is relevant not only to their nation and term but also to the sequential relationship of terms. Based on this, we can infer that the missing value corresponds to the president succeeding President Trump.
+
+Intra-column heterogeneity and intra-column homogeneity . Features across columns can be highly diverse, and cells within the
+
+High-order relationship . The high-order relationship suggests that the value of the cell is influenced simultaneously by multiple columns as a whole. For example, as shown in Figure 2, the name of a president can be determined simultaneously by the nation and the term as a whole. However, neither the nation nor the term alone is sufficient to fully determine the value.
+
+same column typically exhibit consistent semantics. For example, as shown in Figure 2, the name is text data and the nation is categorical data. Furthermore, the name remains consistent across rows.
+
+Next, we formally define the imputation error.
+
+Definition 3.1: (Imputation Error). Given a model 𝜃 𝑋 𝑜𝑏𝑠 trained on the observed data 𝑋 𝑜𝑏𝑠 , the imputation error Ψ ( 𝜃 𝑋 𝑜𝑏𝑠 , 𝑋 𝑚𝑖𝑠𝑠 ) captures the expected performance of 𝜃 𝑋 𝑜𝑏𝑠 on the test unobserved data 𝑋 𝑚𝑖𝑠𝑠 , i.e., Ψ ( 𝜃 𝑋 𝑜𝑏𝑠 , 𝑋 𝑚𝑖𝑠𝑠 ) = E [∥ 𝜃 𝑋 𝑜𝑏𝑠 ( 𝑋 𝑚𝑖𝑠𝑠 ) -𝑋 𝑚𝑖𝑠𝑠 ∥] . When the context is clear, we denote 𝜃 𝑋 𝑜𝑏𝑠 as 𝜃 to improve readability.
+
+We then have the following three theorems highlighting the importance of global-local information, high-order information and column patterns, respectively. The proofs are in Section 4.
+
+Theorem 3.1: Consider two imputation models, 𝜃 𝑔 + 𝑙 and 𝜃 𝑙 , where 𝜃 𝑔 + 𝑙 captures both global and local information in the latent space, and 𝜃 𝑙 captures only the local information. Assuming that interactions of global and local information are independent, then we have:
+
+<!-- formula-not-decoded -->
+
+indicating that a model capable of capturing both global and local information achieves a lower imputation error.
+
+Theorem 3.2: Consider two imputation models, 𝜃 [ 0: 𝑟 ] and 𝜃 [ 0: 𝑠 ] , where 𝜃 [ 0: 𝑟 ] captures interactions up to order 𝑟 in the latent space, and 𝜃 [ 0: 𝑠 ] captures interactions up to order 𝑠 , with 𝑟 &gt; 𝑠 . We have
+
+<!-- formula-not-decoded -->
+
+indicating that the model capable of capturing higher-order interactions exhibits a lower imputation error.
+
+Theorem 3.3: Consider two imputation models, 𝜃 𝑐𝑝 and 𝜃 , where 𝜃 𝑐𝑝 captures the column patterns including intra-column heterogeneity and intra-column homogeneity, while 𝜃 does not. Then, we have:
+
+<!-- formula-not-decoded -->
+
+indicating that model 𝜃 𝑐𝑝 capturing the column patterns achieves a lower imputation error.
+
+## 3.2 Overview of UnIMP
+
+Guided by the above key intrinsic characteristics of tabular data, we propose UnIMP for accurate mixed-type data imputation. The overall architecture is illustrated in Figure 2. Given the incomplete raw dataset, UnIMP first utilizes the chunking technique and progressive masking to process data. Then, cell-oriented hypergraphs are constructed. UnIMP utilizes the tokenizer and LLM backbone for feature initialization and propagation, projecting both raw data and query prompts from the text space to the embedding space. These obtained features are processed through the BiHMP module, which iteratively runs the node-to-hyperedge layer and the hyperedge-to-node layer to aggregate both local and global information. The aggregated feature is then fused with the embedded prompts using an XFusion module. Finally, a projection head maps the predicted data back to token space, and a decoding process is employed to translate the tokens into human-readable results.
+
+## 3.3 Cell-Oriented Hypergraph Modeling
+
+Motivation . To capture the structural properties of tabular data, existing imputation methods often employ graph-based approaches, Name Obama Name Putin Trump Nation Nation Age
+
+63
+
+81
+
+Age
+
+78
+
+Query Decoding The Name of the president is Biden Trainable block Frozen block High-order Message Passing
+
+Figure 2: Framework overview of UnIMP
+
+<!-- image -->
+
+Hypergraph  Modeling
+
+Given a tabular dataset 𝑋 with 𝑛 samples, each containing 𝑑 features, we construct a hypergraph 𝐻𝐺 (V , E) as follows:
+
+Gender Sport Transpotation The Sport is baseball. The Transpotation is car. The missing data in row-2, column Gender is: ... ... Prompt Tokenizer Node2HyperEdge HyperEdge2Node such as bipartite graphs [64, 70] and similarity graphs [7]. While effective, these methods fall short in comprehensively representing the complex interactions and higher-order relationships inherent in tabular data. To better capture the intrinsic characteristics of tabular data, we adopt a hypergraph-based approach for modeling. While some hypergraph-based methods, such as the cell-oriented hypergraph in [8] and the value-oriented method in [11], have been introduced for general tabular representation learning, they have not yet been employed for imputation. The value-oriented approach models each distinct value as a node, with nodes in the same row sharing a hyperedge. However, this method struggles to deal with mixed-type data and effectively handles missingness. Moreover, missing data imputation focuses on the granularity of individual cells, as missingness occurs at the cell level. Therefore, we adopt the cell-oriented hypergraph following [8]. It is important to note that the work in [8] focuses on tabular representation learning, our work is specifically designed for missing data imputation. Additionally, their method treats hypergraph neural network and language models as separate components, whereas we introduce BiHMP and Xfusion, which serve as the adapters for LLM, to better aggregate information and combine both advantages.
+
+Fusion Block
+
+with their column names to the prompt. We use the following serialization prompt for hyperedge data.
+
+This is row (or col): i (or col\_name) EOS
+
+Trainable Tokenization . Then, the text is sent into the tokenizer to split the prompt into tokens. There are many commonly used tokenizers like BPE [4] and SentencePiece [26]. In our experiments, we use the SentencePiece tokenizer associated with Llama2.
+
+block
+
+<!-- formula-not-decoded -->
+
+Propagation of LLM backbone . The tokens are processed through the LLM backbone for feature initialization and propagation. Initially, the LLM backbone performs a lookup in the embedding matrix, a predefined matrix with dimensions | Vocab | × 𝑑 , where | Vocab | denotes the vocabulary size and 𝑑 represents the hidden dimension. Each token ID corresponds to a specific row in this embedding matrix, serving as an index to retrieve the corresponding embedding vector. These embedding vectors are then fed into the transformer layer [49] for feature propagation.
+
+<!-- formula-not-decoded -->
+
+- For each cell 𝑥 𝑖 𝑗 ∈ 𝑋 , we create a corresponding node 𝑣 𝑖𝑑𝑥 ∈ V , where 𝑖𝑑𝑥 = 𝑖 ∗ 𝑑 + 𝑗 .
+- Similarly, nodes in the same row (i.e., nodes corresponding to { 𝑥 𝑖 0 , 𝑥 𝑖 1 , · · · } ) form a hyperedge 𝑒 𝑖 + 𝑑 ∈ E .
+- For nodes in the same column (i.e., nodes corresponding to { 𝑥 0 𝑗 , 𝑥 1 𝑗 , · · · } ), we construct a hyperedge 𝑒 𝑗 ∈ E .
+
+## 3.4 Feature Encoding
+
+As the neural network models need vectorized inputs, we introduce a vectorization technique to project data from the text space into the vector space. We use the LLM backbone to encode the text data. Serialization . In order to obtain the embedding, we need to feed the proper prompt text to the LLM backbone. We use the following serialization prompt for node data. Here, EOS (i.e., end of the sentence) is a special token to denote the end of the prompt.
+
+Row i, col\_name=&gt;{node data} EOS
+
+To provide additional context for the prompt when making a query, we also concatenate the other observed data in the same row along Each token 𝑡 𝑖 is encoded as a feature representation 𝑧 𝑡 𝑖 . For the prompt text corresponding to node 𝑣 𝑖 (or hyperedge 𝑒 𝑖 ), we use the representation of the last token as the initial feature 𝑧 0 𝑣 𝑖 (or 𝑧 0 𝑒 𝑖 , respectively). For numerical data, we directly encode the input as its value to avoid unnecessary computational overhead. For categorical features, we employ label encoding, which assigns unique integers to each category, aligning with recent works [19, 35, 52, 53, 69].
+
+## 3.5 Bidirectional High-order Message Passing
+
+Motivation . In tabular data, interactions often involve multiple entities simultaneously. For instance, multiple cells within the same row and column exhibit high-order interactions. To capture these complexities, Hypergraph Neural Networks (HGNNs) (e.g., [16]) can be employed for message passing, but they typically come with high computational costs. While a hypergraph-structure-aware transformer was proposed in [8], it not only faces efficiency challenges but also tends to lose fine-grained local information due to its maximal invariant properties. A simplified and fast HGNN [47] can accelerate training, but it only handles node information, overlooking
+
+Serialization
+
+......
+
+Row 1. The Nation of the
+
+president is USA. The
+
+Age is 81. The Name=&gt;:
+
+81
+
+in Tokenizer Tokenizer hyperedges. Therefore, we propose BiHMP, a novel Bidirectional High-order Message Passing network that operates bidirectionally between nodes and hyperedges in the constructed hypergraph. BiHMP comprises two key components: 1) Node-to-Hyperedge layer, which propagates information from each node to its associated hyperedges through a linear layer. 2) Hyperedge-to-Node layer, which propagates information from hyperedges back to their constituent nodes through a linear layer. Through the iterative application of these two layers, BiHMP captures high-order and multi-hop relationships within the data, enhancing its ability to model complex interactions.
+
+Node-to-Hyperedge . For each hyperedge 𝑒 𝑗 ∈ E and node 𝑣 𝑖 ∈ 𝑒 𝑗 , with their respective embeddings 𝑧 𝑙 𝑒 𝑗 and 𝑧 𝑙 𝑣 𝑖 in 𝑙 -th Node-toHyperedge layer, we use the following equation to learn to update the representation of hyperedge:
+
+<!-- formula-not-decoded -->
+
+where 𝑓 𝑙 1 (·) and 𝑓 𝑙 2 (·) represents learnable linear transformation functions. 𝜎 (·) is a non-linear activation function (ReLU in UnIMP). CONCAT (·) is the concatenation function that stacks multiple inputs into a single, longer vector. For each node in the hyperedge, we apply a learnable transformation followed by a non-linear activation 𝜙 (·) . We then compute the mean of these transformed node features to obtain 𝑧 𝑡𝑒𝑚𝑝 𝑒 𝑖 , which captures the average information from all nodes in the hyperedge. This temporary representation is concatenated with the representation of the hyperedge from the previous layer, 𝑧 𝑙 𝑒 𝑗 . Finally, we apply another transformation layer and non-linear activation layer to this concatenated vector to obtain the updated hyperedge representation 𝑧 𝑙 + 1 𝑒 𝑗 .
+
+Hyperedge-to-Node . The Hyperedge-to-Node layer updates node representations by aggregating information from their incident hyperedges. For each node 𝑣 𝑖 ∈ V with its two incident hyperedges i.e., the row-level hyperedge 𝑒 𝑟 𝑣 𝑖 and column-level hyperedge 𝑒 𝑐 𝑣 𝑖 , we update the node representation by the following equation in the 𝑙 -th Hyperedge-to-Node layer:
+
+<!-- formula-not-decoded -->
+
+where 𝑓 𝑙 3 (·) is a learnable linear function. The Hyperedge-to-Node layer first concatenates the embedding of the node 𝑧 𝑙 𝑣 𝑖 with the embeddings of all hyperedges that contain the node, i.e., 𝑧 𝑙 𝑒 𝑐 𝑣 𝑖 and 𝑧 𝑙 𝑒 𝑟 𝑣 𝑖 . The concatenated representation is then processed through a learnable linear transformation function 𝑓 𝑙 3 (·) . Finally, a nonlinear activation function 𝜎 (·) is applied to obtain the updated node representation in ( 𝑙 + 1 ) -th layer 𝑧 𝑙 + 1 𝑣 𝑖 . Note that, the main component in our BiHMP is the linear transformation which is efficient yet effective for information propagation.
+
+## 3.6 XFusion Block and Projection Head
+
+XFusion block . After encoding the prompt and aggregating local and global information by BiHMP, it is crucial to effectively integrate these features for accurate imputation. We designed XFusion Algorithm 1: Forward Propagation of UnIMP
+
+<!-- formula-not-decoded -->
+
+to synthesize the rich information derived from the prompt feature (denoted as 𝑧 𝑝 = { 𝑧 𝑡 0 , 𝑧 𝑡 1 , · · · , 𝑧 𝑡 𝑠 } ) with the features extracted from the hypergraph representation (denoted as 𝑍 𝑔 where 𝑧 𝑔 ∈ 𝑍 𝑔 is a concatenation of 𝑧 𝑙 𝑚𝑎𝑥 𝑒 𝑐 𝑣 𝑖 and 𝑧 𝑙 𝑚𝑎𝑥 𝑒 𝑟 𝑣 𝑖 for imputing node 𝑣 𝑖 ). XFusion is based on the attention mechanism [49], a critical component of LLMs. The attention is computed as follows:
+
+<!-- formula-not-decoded -->
+
+where 𝑄 , 𝐾 and 𝑉 are the input feature matrices, 𝑤 is a learnable weight matrix, and 𝑑 𝐾 is the dimensionality of the vectors in 𝐾 .
+
+Building on this attention mechanism, our XFusion module leverages both token embeddings and hypergraph-derived embeddings to construct a rich, context-aware representation. The forward process of XFusion is as follows:
+
+<!-- formula-not-decoded -->
+
+Here, 𝑊 𝑄 , 𝑊 𝐾 and 𝑊 𝑉 are learnable weight matrices. We first calculate the self-attention of the prompt embedding. We then use the obtained prompt feature ℎ 𝑡𝑒𝑚𝑝 𝑝 as the query and the graph feature ℎ 𝑔 as both the key and value matrices. The attention mechanism between prompt embeddings and graph embeddings allows the model to effectively align and integrate the prompt information with the local and global information from the graph embeddings. Projection head . The obtained 𝑧 𝑜𝑢𝑡𝑝𝑢𝑡 ∈ R ( 𝑠 + 1 ) × 𝑑 ℎ is in a highdimensional space, and the projection head is a key component that maps this high-dimensional embedding to a target space. It is modeled as a linear layer 𝑓 ℎ𝑒𝑎𝑑 : 𝑧 𝑜𝑢𝑡𝑝𝑢𝑡 ↦→ 𝑜 ∈ R ( 𝑠 + 1 ) × 𝑑 𝑜 . For numerical and categorical data, 𝑑 𝑜 = 1, as it requires only a single value as the imputation. In contrast, for text data, the task involves predicting a token ID, making it a classification task. Hence, 𝑑 𝑜 = | Vocab | , where | Vocab | denotes the size of the vocabulary.
+
+With the above introduction of key components in UnIMP, we now show that the UnIMP captures the key intrinsic characteristics analyzed in Section 3.1. The proof is in Section 4.
+
+Theorem 3.4: The UnIMP framework captures the global-local information, high-order relationship, inter-column heterogeneity and intra-column homogeneity for imputation.
+
+The overall forward process of UnIMP is summarized in Algorithm 1. UnIMP takes the raw dataset 𝑋 and mask 𝑀 as inputs and outputs the imputed dataset ˜ 𝑋 . We first construct a hypergraph according to the process introduced in Section 3.3 (Line 1). It then initializes the feature of each node and hyperedge (Lines 2 to 5). The initialized features are then propagated by the high-order messagepassing framework (Lines 6 to 9). It contains 𝑙 𝑚𝑎𝑥 layers and each layer contains both the Node-to-Hyperedge layer (Lines 7 and 8) and Hyperedge-to-Node (Line 9). The aggregated feature and the prompt representation are then fused by the Xfusion for projection (Lines 10 to 18). Prompt embedding is first updated by previous predicted ˜ 𝑥 𝑣 𝑖 (Line 13). The Xfusion is applied to the obtained features (Lines 13 to 14). The projection head is applied to predict the imputation, using the last token as the newly predicted token (Line 16). If the predicted token is EOS or its type is numerical or categorical, it terminates the auto-regressive process (Lines 17 to 18). At last, the algorithm outputs the imputed matrix.
+
+## 4 TRAINING AND ANALYSIS
+
+## 4.1 Training Objectives
+
+Motivation . The training objective guides the model towards desired behaviors and outputs during the learning process. For the text data, it may contain an arbitrary length of tokens. Therefore, it is often modeled as the classification of the token ID of the next token and is processed in an auto-regressive manner. For the numerical data and the label-encoded categorical data, the imputation is often modeled as the task of regression.
+
+The learning process for text data is handled using an autoregressive approach. For a sequence of tokens ( 𝑡 0 , 𝑡 1 , · · · , 𝑡 𝑠 ) , an autoregressive model tries to predict the next element in the sequence, given all the previous tokens. This objective is based on Cross Entropy (CE) [10, 51] as follows:
+
+<!-- formula-not-decoded -->
+
+<!-- formula-not-decoded -->
+
+Where 𝑡 𝑖 [ 𝑗 ] and 𝜃 (·) [ 𝑗 ] are the probabilities of corresponding values belonging to 𝑗 -th class.
+
+The learning objective for numerical and categorical data is formulated using the Huber Loss [21]. For a true value 𝑥 𝑖 𝑗 and predicted value ˜ 𝑥 𝑖 𝑗 , Huber Loss is defined:
+
+<!-- formula-not-decoded -->
+
+where 𝛿 is a positive hyper-parameter. Compared to other loss functions, Huber Loss offers the following advantages: 1) For errors smaller than 𝛿 , Huber Loss behaves like Mean-Squared-Error (MSE), being sensitive to small errors; 2) For errors larger than 𝛿 , it behaves like Mean-Absolute-Error (MAE), being less sensitive to potential outliers. Moreover, Huber Loss is differentiable at all points, which is beneficial for optimization. By adjusting the value of 𝛿 , it is flexible to balance between MSE and MAE, adapting to different contexts. We set 𝛿 = 1 suggested by the experiment in Section 5.
+
+## 4.2 Training Pipeline
+
+Motivation . Previous works in imputation [52, 63, 64, 69] typically train a separate model for each dataset. While effective, this practice significantly increases computational costs, as training a model can be time-intensive. Additionally, models trained on individual datasets often struggle to generalize to other datasets. A common alternative in the field of LLM is the "pre-train and finetune" strategy. However, the variability in table sizes and the propensity of neural models to overfit present challenges. In this work, we follow the "pre-train and finetune" paradigm for imputation, introducing two plug-and-play optimizations: the chunking technique and the progressive masking technique.
+
+Optimization 2: Progressive masking technique . Starting with the raw dataset, we gradually increase the proportion of masked data. The newly masked ratio is set from 𝜅 to 𝜅 + 30% where 𝜅 is hyperparameter and is set to 35% suggested by the experiments in Section 5. As training progresses, we mask more data, gradually exposing the model to more challenging imputation scenarios. This progressive masking strategy allows the model to incrementally learn patterns from simpler to more complex missing data scenarios and thus improve the generalization ability.
+
+Optimization 1: Chunking technique . We split the entire dataset into smaller, uniformly sized chunks (512 rows in each chunk in our experiments). This approach ensures that all chunks are processed efficiently and in parallel, enabling batch training and reducing the heavy IO time associated with handling large and irregularly sized datasets. By transforming the dataset into manageable chunks, we also facilitate more effective memory utilization, preventing bottlenecks during model training.
+
+We summarize the overall pre-training pipeline in Algorithm 2. Following the SFT, the fine-tuning process has a similar procedure to the pre-training. The pre-training stage utilizes all available datasets, while fine-tuning focuses on specific datasets. The pipeline inputs training datasets, chunk size, batch size, initial model parameters, learning rate and the number of epochs. It first splits the training datasets into batched chunks (Line 1) and initializes the optimizer with the given learning rate (Line 2). The model is trained for Epochs epochs (Lines 3-12). During each epoch, we mask more
+
+## Algorithm2: Pre-Training Pipeline
+
+```
+Input: The tabular datasets T with its masks M , chunk size 𝑐 𝑠𝑖𝑧𝑒 , batchsize 𝑏 𝑠𝑖𝑧𝑒 , model parameters 𝜃 UnIMP, learning rate 𝜑 , Epoch num 𝐸𝑝𝑜𝑐ℎ𝑠 , mask rate 𝜅 . 1 { 𝑋 𝑐 , 𝑀 𝑐 } ← Split X , M into batched chunks by 𝑐 𝑠𝑖𝑧𝑒 & 𝑏 𝑠𝑖𝑧𝑒 2 Initialize optimizer 𝑜𝑝𝑡 𝜃 with learning rate 𝜑 3 for 𝐸𝑝𝑜𝑐ℎ ∈ { 0 , 1 , · · · , 𝐸𝑝𝑜𝑐ℎ𝑠 } do 4 ′ 𝑀 𝑐 ← mask ( 𝜅 + 𝐸𝑝𝑐𝑜ℎ 𝐸𝑝𝑜𝑐ℎ𝑠 × 0 . 30 ) of 𝑀 𝑐 5 for each 𝑋 𝑐 ∈ { 𝑋 𝑐 } do 6 ˜ 𝑋 𝑐 ← Algorithm 1( 𝑋 𝑐 , ′ 𝑀 𝑐 , 𝜃 UnIMP) 7 for each 𝑥 𝑖 𝑗 ∈ 𝑇 𝑐 and 𝑀 𝑐 𝑖 𝑗 = 0 do 8 if 𝑥 𝑖 𝑗 being numerical or categorical then 9 L ← Compute loss by Eqn 7 10 else 11 L ← Compute loss by Eqn 6 12 Update 𝜃 UnIMP by 𝑜𝑝𝑡𝜃 with loss L | 𝑋 𝑐 | . 13 Return 𝜃 UnIMP
+```
+
+data, and for each batch, the algorithm performs forward propagation (as described in Algorithm 1) to compute the imputation results (Line 6). For numerical or categorical data, the loss is calculated using Eqn 7, while for text data, the loss is computed using Eqn 6. After processing all cells in a chunk, the model parameters are updated using the optimizer and the loss (Line 12). Finally, the learned parameters are returned (Line 13).
+
+## 4.3 Complexity Analysis
+
+The feature encoding process requires encoding |V| + |E| prompts, with the time complexity of LLM inference being 𝑂 ( 𝑙 𝑡𝑟𝑎𝑛𝑠 × 𝑡 2 𝑚𝑎𝑥 × 𝑑 𝐿𝐿𝑀 ) [71], where 𝑙 𝑡𝑟𝑎𝑛𝑠 is the number of transformer layers, 𝑡 𝑚𝑎𝑥 is maximum number of tokens, and 𝑑 𝐿𝐿𝑀 is the dimension of embeddings in LLM. Therefore, the total time complexity of feature encoding is 𝑂 ((|V| + |E|) × 𝑙 𝑡𝑟𝑎𝑛𝑠 × 𝑡 2 𝑚𝑎𝑥 × 𝑑 𝐿𝐿𝑀 ) .
+
+The training pipeline consists of 𝐿 layers of Node-to-Hyperedge and Hyperedge-to-Node operations with complexities 𝑂 ( 𝑑 𝐿𝐿𝑀 × |V| + 𝑑 𝐿𝐿𝑀 × |E|) and 𝑂 ( 𝑑 𝐿𝐿𝑀 × |E|) , respectively. An attentionbased fusion block requires 𝑂 ( 𝑡 2 𝑚𝑎𝑥 × 𝑑 𝐿𝐿𝑀 ) , and a linear projection head needs 𝑂 ( 𝑑 𝐿𝐿𝑀 ) complexity. Accordingly, the overall time complexity of the training pipeline is 𝑂 ( 𝐸𝑝𝑜𝑐ℎ𝑠 × 𝑡 𝑚𝑎𝑥 × ( 𝑙 𝑚𝑎𝑥 × ( 2 × 𝑑 𝐿𝐿𝑀 × |V| + 𝑑 𝐿𝐿𝑀 × |E|) + 𝑡 2 𝑚𝑎𝑥 × 𝑑 𝐿𝐿𝑀 + 𝑑 𝐿𝐿𝑀 )) .
+
+## 4.4 Theoretical Proofs
+
+In this part, we present the proofs for Theorem 3.1, Theorem 3.2, Theorem 3.3 and Theorem 3.4. We first introduce the concepts of entropy and mutual information which are the base of the proof.
+
+Definition 4.1: 𝐻 ( 𝑋 ) = -˝ 𝑥 ∈ 𝑋 𝑝 ( 𝑥 ) log 𝑝 ( 𝑥 ) represents the entropy that quantifies the average level of information associated with 𝑋 . 𝐼 ( 𝑋 ; 𝑌 ) = 𝐻 ( 𝑋 ) -𝐻 ( 𝑋 | 𝑌 ) is the mutual information between the 𝑋 and 𝑌 .
+
+Lemma 4.1: 𝐻 ( 𝑋 | 𝑌 ) ≥ 𝐻 ( 𝑋 | 𝑌, 𝑍 )) and the equation get if the information of 𝑍 is encoded in 𝑌 .
+
+Proof. 𝐻 ( 𝑋,𝑍 | 𝑌 ) = 𝐻 ( 𝑍 | 𝑌 ) + 𝐻 ( 𝑋 | 𝑌, 𝑍 ) . Therefore 𝐻 ( 𝑋 | 𝑌, 𝑍 ) = 𝐻 ( 𝑋,𝑍 | 𝑌 ) -𝐻 ( 𝑍 | 𝑌 ) . As 𝐻 ( 𝑍 | 𝑌 ) ≥ 0, we can obtain the inequality. □
+
+Proof of Theorem 3.1 . The imputation error reflects how well the model trained on the training dataset generalizes to the unobserved data. According to the information bottleneck theory [25, 56], Ψ ( 𝜃 𝑋 𝑜𝑏𝑠 , 𝑋 𝑚𝑖𝑠𝑠 ) is proven to scale as ˜ 𝑂 ( √︃ 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 )+ 1 𝑛 𝑜𝑏𝑠 ) where and 𝑛 𝑜𝑏𝑠 is the number of training observed data. For model 𝜃 𝑔 + 𝑙 , its mutual information is 𝐼 𝑔 + 𝑙 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑔 + 𝑙 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑔 , 𝐵 𝑙 ) where 𝐵 𝑔 + 𝑙 is the captured global and local information. For model 𝜃 𝑙 , its mutual information is 𝐼 𝑙 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 ) . Then we have
+
+```
+𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 , 𝐵 𝑙 ) -𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝐵 𝑙 ) = 𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 ) -𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝑍 𝑚𝑖𝑠𝑠 , 𝐵 𝑙 ) -𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 ) + 𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 ) = 𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 ) -𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝑍 𝑚𝑖𝑠𝑠 , 𝐵 𝑙 ) ≈ 𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 ) -𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝑍 𝑚𝑖𝑠𝑠 , 𝐵 𝑙 , 𝐵 𝑔 ) ≥ 𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 , 𝐵 𝑔 ) -𝐻 ( 𝑋 𝑚𝑖𝑠𝑠 | 𝑍 𝑚𝑖𝑠𝑠 , 𝐵 𝑙 , 𝐵 𝑔 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑙 , 𝐵 𝑔 )
+```
+
+The first line is obtained by the definition of conditional mutual information. The second line is obtained by the definition of mutual information. The fourth line and fifth line are based on Lemma 4.1. The fourth line is obtained as 𝑍 𝑚𝑖𝑠𝑠 contains the information in 𝐵 𝑔 and add this term will not increase the entropy. The sixth line can be obtained by the reversal of the first three lines. Therefore, we can have Ψ ( 𝜃 𝑔 + 𝑙 , 𝑋 𝑚𝑖𝑠𝑠 ) ≤ Ψ ( 𝜃 𝑙 , 𝑋 𝑚𝑖𝑠𝑠 ) .
+
+Proof of Theorem 3.4 . 1): Global-local information . Any cell 𝑥 𝑖 𝑗 can reach the selected cell 𝑥 𝑟𝑠 in two hops, as 𝑥 𝑖 𝑗 and 𝑥 𝑖𝑠 are connected by a hyperedge (they are in the same row), and 𝑥 𝑖𝑠 and 𝑥 𝑟𝑠 are connected by a hyperedge (they are in the same column). 2): High-order information . The hyperedges enable the capture of features from multiple cells within the same row and column, allowing UnIMP to model high-order relationships effectively. 3): Inter-column heterogeneity and intra-column homogeneity . Each cell is modeled as a distinct node in the hypergraph which can better capture the inter-column heterogeneity. Moreover, the usage of column hyperedge can better capture the intra-column homogeneity.
+
+Proofs of Theorems 3.2 and 3.3 . The proofs of Theorem 3.2 and Theorem 3.3 are similar to that of Theorem 3.1. Given 𝜃 [ 0: 𝑟 ] , its mutual information can be represented as 𝐼 [ 0: 𝑟 ] ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 [ 0: 𝑟 ] ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 [ 0: 𝑠 ] , 𝐵 [ 𝑠 + 1: 𝑟 ] ) . Here, we use 𝐵 [ 0: 𝑟 ] to represent the captured interactions from order 0 to order r. For model 𝜃 [ 0: 𝑠 ] , its mutual information is 𝐼 𝑔 + 𝑙 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 [ 0: 𝑠 ] ) where 𝐵 [ 0: 𝑠 ] is the captured interactions from order 0 to order s and 𝑟 ≥ 𝑠 . Then, we can get Ψ ( 𝜃 [ 0: 𝑟 ] , 𝑋 𝑚𝑖𝑠𝑠 ) ≤ Ψ ( 𝜃 [ 0: 𝑠 ] , 𝑋 𝑚𝑖𝑠𝑠 ) by replacing 𝐵 𝑔 + 𝑙 and 𝐵 𝑙 in the proof of Theorem 3.1 with 𝐵 [ 0: 𝑟 ] and 𝐵 [ 0: 𝑠 ] , respectively. Similarly, given a model 𝜃 𝑐𝑝 , its mutual information can be calculated as 𝐼 𝑐𝑝 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 ) = 𝐼 ( 𝑋 𝑚𝑖𝑠𝑠 ; 𝑍 𝑚𝑖𝑠𝑠 | 𝐵 𝑐𝑝 , 𝐵 𝑏𝑎𝑠𝑒 ) where 𝐵 𝑐𝑝 is the captured column patterns beside the base pattern 𝐵 𝑏𝑎𝑠𝑒 . Then, we can get the inequality Ψ ( 𝜃 𝑐𝑝 , 𝑋 𝑚𝑖𝑠𝑠 ) ≤ Ψ ( 𝜃, 𝑋 𝑚𝑖𝑠𝑠 ) by replacing 𝐵 𝑔 + 𝑙 and 𝐵 𝑙 in the proof of Theorem 3.1 with 𝐵 𝑐𝑝 and 𝐵 𝑏𝑎𝑠𝑒 , respectively.
+
+Metadata: {'source': 'https://arxiv.org/pdf/2501.02191'}
