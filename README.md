@@ -50,9 +50,6 @@ Or with Poetry:
 
 Contributions are welcome. Please open an issue or submit a pull request with a clear description of the change.
 
-## License
-
-Specify a license here (e.g., MIT) — add a `LICENSE` file to the repository if you choose one.
 
 
 ---
