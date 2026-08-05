@@ -51,10 +51,3 @@ Or with Poetry:
 Contributions are welcome. Please open an issue or submit a pull request with a clear description of the change.
 
 
-
----
-
-If you want, I can:
-- add a more detailed setup guide including exact dependency install commands (I can extract dependencies from pyproject.toml),
-- add usage examples or code snippets showing how to call the main functions, or
-- create a LICENSE file and a requirements.txt.
