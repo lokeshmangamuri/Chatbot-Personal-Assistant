@@ -5,39 +5,36 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class DataLoader:
 
-    def __init__(self, pdf_path):
+    def __init__(self):
 
-        self.pdf_path = pdf_path
+        self.converter = DocumentConverter()
 
-    def load(self):
-
-        converter = DocumentConverter()
-        result = converter.convert(self.pdf_path)
-
-        markdown = result.document.export_to_markdown()
-
-        document = Document(
-            page_content=markdown,
-            metadata={"source": self.pdf_path})
-        return [document]
-
-    def split_documents(self, documents):
-
-        splitter = RecursiveCharacterTextSplitter(
+        self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             add_start_index=True,
         )
 
-        chunks = splitter.split_documents(documents)
-        # with open("documents.txt", "w", encoding="utf-8") as f:
-        #     for i, chunk in enumerate(chunks, start=1):
-        #         f.write("=" * 80 + "\n")
-        #         f.write("Document 1\n")
-        #         f.write("=" * 80 + "\n")
-        #         f.write(chunk.page_content)
-        #         f.write("\n\nMetadata:\n")
-        #         f.write(str(chunk.metadata))
+
+    def load(self, source):
+
+        result = self.converter.convert(source)
+
+        markdown = result.document.export_to_markdown()
+
+        document = Document(
+            page_content=markdown,
+            metadata={
+                "source": str(source)
+            }
+        )
+
+        return [document]
+
+
+    def split_documents(self, documents):
+
+        chunks = self.splitter.split_documents(documents)
 
         print(f"Number of chunks: {len(chunks)}")
 
