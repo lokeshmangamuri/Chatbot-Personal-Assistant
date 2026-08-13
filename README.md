@@ -2,6 +2,10 @@
 
 A powerful Retrieval-Augmented Generation (RAG) chatbot built with **Streamlit**, **LangChain**, and **Hugging Face** that combines document-based knowledge retrieval with web search capabilities.
 
+## Architecture
+
+![Architecture](images/architecture1.png)
+
 ## ✨ Features
 
 - 📄 **Multi-format Document Support**: Upload PDF, Word, Excel, and other document formats
