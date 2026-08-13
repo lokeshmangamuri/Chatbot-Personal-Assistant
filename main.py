@@ -171,8 +171,7 @@ def generate_answer(question, use_web_search):
 
     if all_docs:
         reranked_docs = ranking.rerank(question,all_docs,k=3)
-
-        context = "\n\n".join(doc.page_contentfor doc in reranked_docs)
+        context = "\n\n".join(doc.page_content for doc in reranked_docs)
         prompt = f"""
                         You are a helpful assistant.
 
