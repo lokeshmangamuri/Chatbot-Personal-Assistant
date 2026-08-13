@@ -19,6 +19,8 @@ A powerful Retrieval-Augmented Generation (RAG) chatbot built with **Streamlit**
 
 ## 🎨 Frontend Layout
 
+![Architecture](images/architecture2.png)
+
 The application uses **Streamlit** for a beautiful, responsive web interface:
 
 ### Main Components:
